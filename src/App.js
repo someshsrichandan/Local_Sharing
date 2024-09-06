@@ -11,34 +11,39 @@ function App() {
 
   // Create a new peer and generate a connection code
   const createConnection = () => {
-    const peer = new SimplePeer({ initiator: true, trickle: false });
+    try {
+      const peer = new SimplePeer({ initiator: true, trickle: false });
 
-    peer.on('signal', (data) => {
-      setMyId(JSON.stringify(data));
-    });
+      peer.on('signal', (data) => {
+        setMyId(JSON.stringify(data));
+      });
 
-    peer.on('connect', () => {
-      setConnectionStatus('Connected');
-    });
+      peer.on('connect', () => {
+        setConnectionStatus('Connected');
+        console.log('Peer connected');
+      });
 
-    peer.on('error', (err) => {
-      console.error('Connection error:', err);
-      setConnectionStatus('Error');
-    });
+      peer.on('error', (err) => {
+        console.error('Connection error:', err);
+        setConnectionStatus('Error');
+      });
 
-    peer.on('data', (data) => {
-      // Handle received data (file data)
-      const receivedFile = new Blob([data]);
-      const url = URL.createObjectURL(receivedFile);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'received_file';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    });
+      peer.on('data', (data) => {
+        const receivedFile = new Blob([data]);
+        const url = URL.createObjectURL(receivedFile);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'received_file';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
 
-    peerRef.current = peer;
+      peerRef.current = peer;
+    } catch (error) {
+      console.error('Error creating connection:', error);
+      setConnectionStatus('Failed to create connection');
+    }
   };
 
   // Connect using the code from another device
@@ -52,6 +57,7 @@ function App() {
 
       peer.on('connect', () => {
         setConnectionStatus('Connected');
+        console.log('Connected to peer');
       });
 
       peer.on('error', (err) => {
@@ -60,7 +66,6 @@ function App() {
       });
 
       peer.on('data', (data) => {
-        // Handle received data (file data)
         const receivedFile = new Blob([data]);
         const url = URL.createObjectURL(receivedFile);
         const link = document.createElement('a');
@@ -98,11 +103,11 @@ function App() {
 
       // Read file in chunks
       const sendChunk = (buffer) => {
-        if (offset < file.size) {
+        if (offset < buffer.byteLength) {
           const chunk = buffer.slice(offset, offset + chunkSize);
           peerRef.current.send(chunk);
           offset += chunkSize;
-          setProgress(Math.floor((offset / file.size) * 100));
+          setProgress(Math.floor((offset / buffer.byteLength) * 100));
           sendChunk(buffer);
         } else {
           setProgress(100);
