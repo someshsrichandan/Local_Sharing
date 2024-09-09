@@ -9,24 +9,34 @@ function App() {
   const [progress, setProgress] = useState(0);
   const peerRef = useRef(null);
   const socketRef = useRef(null);
+  const [isWebSocketReady, setIsWebSocketReady] = useState(false);
 
   useEffect(() => {
     // Initialize WebSocket connection
-    socketRef.current = new WebSocket('ws://localhost:4000'); // Adjust with your WebSocket server address
+    socketRef.current = new WebSocket('ws://localhost:4000');
 
     socketRef.current.onopen = () => {
       console.log('WebSocket connection established');
+      setIsWebSocketReady(true);
     };
 
     socketRef.current.onmessage = (message) => {
       const data = JSON.parse(message.data);
       if (data.type === 'signal') {
         peerRef.current.signal(data.signal);
+      } else if (data.type === 'request') {
+        // Auto-accept connection requests for demo purposes
+        connectToPeer(data.from);
       }
     };
 
     socketRef.current.onerror = (error) => {
       console.error('WebSocket error:', error);
+    };
+
+    socketRef.current.onclose = () => {
+      console.log('WebSocket connection closed');
+      setIsWebSocketReady(false);
     };
 
     return () => {
@@ -43,12 +53,12 @@ function App() {
     peer.on('signal', (data) => {
       const shortCode = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit random code
       setMyCode(shortCode);
-      if (socketRef.current.readyState === WebSocket.OPEN) {
+      if (isWebSocketReady) {
         socketRef.current.send(
           JSON.stringify({ type: 'register', code: shortCode, signal: data })
         );
       } else {
-        console.error('WebSocket is not ready');
+        console.error('WebSocket is not ready to send data');
       }
     });
 
@@ -76,16 +86,16 @@ function App() {
   };
 
   // Connect using the code from another device
-  const connectToPeer = () => {
+  const connectToPeer = (targetCode) => {
     const peer = new SimplePeer({ initiator: false, trickle: false });
 
     peer.on('signal', (data) => {
-      if (socketRef.current.readyState === WebSocket.OPEN) {
+      if (isWebSocketReady) {
         socketRef.current.send(
-          JSON.stringify({ type: 'signal', code: peerCode, signal: data })
+          JSON.stringify({ type: 'signal', targetCode: targetCode || peerCode, signal: data })
         );
       } else {
-        console.error('WebSocket is not ready');
+        console.error('WebSocket is not ready to send data');
       }
     });
 
@@ -111,11 +121,13 @@ function App() {
 
     peerRef.current = peer;
 
-    // Inform server to look up the initial offer signal with this code
-    if (socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: 'lookup', code: peerCode }));
-    } else {
-      console.error('WebSocket is not ready');
+    if (!targetCode) {
+      // Inform server to look up the initial offer signal with this code
+      if (isWebSocketReady) {
+        socketRef.current.send(JSON.stringify({ type: 'lookup', code: peerCode }));
+      } else {
+        console.error('WebSocket is not ready to send data');
+      }
     }
   };
 
@@ -185,7 +197,7 @@ function App() {
           className="w-full mb-3 p-2 border rounded"
         />
         <button
-          onClick={connectToPeer}
+          onClick={() => connectToPeer()}
           className="w-full py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
         >
           Connect to Peer
